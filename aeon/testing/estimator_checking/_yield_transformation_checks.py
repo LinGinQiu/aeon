@@ -5,6 +5,7 @@ from sys import platform
 
 import numpy as np
 import pandas as pd
+from numpy.testing import assert_array_almost_equal
 from sklearn.utils._testing import set_random_state
 
 from aeon.base._base import _clone_estimator
@@ -14,10 +15,7 @@ from aeon.testing.expected_results.expected_transform_outputs import (
     unit_test_result,
 )
 from aeon.testing.testing_data import FULL_TEST_DATA_DICT
-from aeon.testing.utils.estimator_checks import (
-    _assert_array_almost_equal,
-    _run_estimator_method,
-)
+from aeon.testing.utils.estimator_checks import _run_estimator_method
 
 
 def _yield_transformation_checks(estimator_class, estimator_instances, datatypes):
@@ -29,16 +27,6 @@ def _yield_transformation_checks(estimator_class, estimator_instances, datatypes
 
     # test class instances
     for i, estimator in enumerate(estimator_instances):
-        # no data needed
-        yield partial(
-            check_capability_inverse_tag_is_correct,
-            estimator=estimator,
-        )
-        yield partial(
-            check_remember_data_tag_is_correct,
-            estimator=estimator,
-        )
-
         # test all data types
         for datatype in datatypes[i]:
             yield partial(
@@ -69,7 +57,7 @@ def check_transformer_against_expected_results(estimator_class):
             continue
 
         # we only use the first estimator instance for testing
-        estimator_instance = estimator_class.create_test_instance(
+        estimator_instance = estimator_class._create_test_instance(
             parameter_set="results_comparison"
         )
         # set random seed if possible
@@ -91,7 +79,7 @@ def check_transformer_against_expected_results(estimator_class):
         )
 
         # assert results are the same
-        _assert_array_almost_equal(
+        assert_array_almost_equal(
             results,
             expected_results,
             decimal=2,
@@ -99,36 +87,10 @@ def check_transformer_against_expected_results(estimator_class):
         )
 
 
-def check_capability_inverse_tag_is_correct(estimator):
-    """Test that the capability:inverse_transform tag is set correctly."""
-    capability_tag = estimator.get_tag("capability:inverse_transform")
-    skip_tag = estimator.get_tag("skip-inverse-transform")
-    if capability_tag and not skip_tag:
-        assert estimator._has_implementation_of("_inverse_transform")
-
-
-def check_remember_data_tag_is_correct(estimator):
-    """Test that the remember_data tag is set correctly."""
-    fit_empty_tag = estimator.get_tag("fit_is_empty", True)
-    remember_data_tag = estimator.get_tag("remember_data", False)
-    msg = (
-        'if the "remember_data" tag is set to True, then the "fit_is_empty" tag '
-        "must be set to False, even if _fit is not implemented or empty. "
-        "This is due to boilerplate that write to self.X in fit. "
-        f"Please check these two tags in {type(estimator)}."
-    )
-    if fit_empty_tag and remember_data_tag:
-        raise AssertionError(msg)
-
-
 def check_transform_inverse_transform_equivalent(estimator, datatype):
     """Test that inverse_transform is indeed inverse to transform."""
     # skip this test if the estimator does not have inverse_transform
     if not estimator.get_class_tag("capability:inverse_transform", False):
-        return None
-
-    # skip this test if the estimator skips inverse_transform
-    if estimator.get_tag("skip-inverse-transform", False):
         return None
 
     estimator = _clone_estimator(estimator)
@@ -139,7 +101,8 @@ def check_transform_inverse_transform_equivalent(estimator, datatype):
     Xt = _run_estimator_method(estimator, "transform", datatype, "train")
 
     Xit = estimator.inverse_transform(Xt)
-    if estimator.get_tag("transform-returns-same-time-index"):
-        _assert_array_almost_equal(X, Xit)
-    elif isinstance(X, pd.DataFrame):
-        _assert_array_almost_equal(X.loc[Xit.index], Xit)
+
+    if isinstance(X, pd.DataFrame):
+        assert_array_almost_equal(X.loc[Xit.index], Xit)
+    else:
+        assert_array_almost_equal(X, Xit)
